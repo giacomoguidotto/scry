@@ -17,7 +17,7 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
@@ -26,7 +26,7 @@ jobs:
         run: brew install xcodegen
 
       - name: Cache SPM packages
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: app/Scry.xcodeproj/project.xcworkspace/xcshareddata/swiftpm
           key: spm-${{ runner.os }}-${{ hashFiles('app/project.yml') }}
@@ -70,7 +70,7 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Check Swift formatting
         run: |
@@ -94,7 +94,7 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -117,7 +117,7 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -131,7 +131,7 @@ jobs:
         run: brew install xcodegen
 
       - name: Cache SPM packages
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: app/Scry.xcodeproj/project.xcworkspace/xcshareddata/swiftpm
           key: spm-${{ runner.os }}-${{ hashFiles('app/project.yml') }}
@@ -199,7 +199,7 @@ jobs:
           gh release upload "$TAG" "$DMG" --clobber
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Scry.app
           path: app/DerivedData/Build/Products/Release/Scry.app
