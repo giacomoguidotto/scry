@@ -132,6 +132,10 @@ final class AppSettings: ObservableObject {
     didSet { defaults.set(screenshotRegionSize, forKey: Keys.screenshotRegionSize) }
   }
 
+  @Published var screenshotMode: ScreenshotMode = .window {
+    didSet { defaults.set(screenshotMode.rawValue, forKey: Keys.screenshotMode) }
+  }
+
   // MARK: - Init
 
   private typealias Keys = Constants.UserDefaultsKeys
@@ -272,6 +276,10 @@ final class AppSettings: ObservableObject {
     if let val = d.string(forKey: Keys.aiCustomEndpoint) { aiCustomEndpoint = val }
     if d.object(forKey: Keys.screenshotRegionSize) != nil {
       screenshotRegionSize = d.double(forKey: Keys.screenshotRegionSize)
+    }
+    if let raw = d.string(forKey: Keys.screenshotMode),
+       let val = ScreenshotMode(rawValue: raw) {
+      screenshotMode = val
     }
   }
 

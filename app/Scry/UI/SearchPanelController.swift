@@ -309,7 +309,7 @@ final class SearchPanelController: NSObject {
         loadingBar.isHidden = false
         startLoadingAnimation()
 
-        let response = provider.startAnalysis(query: currentQuery)
+        let response = provider.startAnalysis()
         aiResultView.observe(response: response)
 
         Task {

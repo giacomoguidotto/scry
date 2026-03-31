@@ -8,7 +8,7 @@ final class AISearchProvider: SearchProvider {
     let supportsNativeRendering = true
 
     /// Set by AppDelegate before triggering search.
-    var screenshotImage: CGImage?
+    var extractionResult: ExtractionResult?
 
     /// The current streaming response, observed by AIResultView.
     private(set) var currentResponse: LLMStreamingResponse?
@@ -16,19 +16,21 @@ final class AISearchProvider: SearchProvider {
     private let llmService = LLMService()
 
     /// Starts analysis and returns the streaming response immediately (no waiting).
-    func startAnalysis(query: String) -> LLMStreamingResponse {
-        let userQuery = query.isEmpty ? nil : query
-        let response = llmService.analyzeImage(screenshotImage, query: userQuery)
+    func startAnalysis() -> LLMStreamingResponse {
+        let result = extractionResult ?? ExtractionResult(
+            screenshot: nil, rawScreenshot: nil, cursorPosition: .zero,
+            axText: nil, ocrText: nil, ocrCenterLine: nil
+        )
+        let response = llmService.analyze(result)
         currentResponse = response
         return response
     }
 
     func search(query: String) async throws -> [SearchResult] {
-        let response = startAnalysis(query: query)
+        let response = startAnalysis()
 
-        // Wait for the stream to complete
         while !response.isComplete {
-            try await Task.sleep(nanoseconds: 50_000_000) // 50ms
+            try await Task.sleep(nanoseconds: 50_000_000)
         }
 
         if let error = response.error {

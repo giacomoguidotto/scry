@@ -142,6 +142,7 @@ struct ConfigFile: Codable, Equatable {
         var model: String
         var customEndpoint: String
         var screenshotRegionSize: Double
+        var screenshotMode: String
 
         enum CodingKeys: String, CodingKey {
             case enabled
@@ -149,18 +150,21 @@ struct ConfigFile: Codable, Equatable {
             case model
             case customEndpoint = "custom_endpoint"
             case screenshotRegionSize = "screenshot_region_size"
+            case screenshotMode = "screenshot_mode"
         }
 
         init(enabled: Bool = false,
              providerType: String = AIProviderType.claude.rawValue,
              model: String = Constants.AIConfig.defaultClaudeModel,
              customEndpoint: String = "",
-             screenshotRegionSize: Double = Double(Constants.Screenshot.defaultRegionSize)) {
+             screenshotRegionSize: Double = Double(Constants.Screenshot.defaultRegionSize),
+             screenshotMode: String = ScreenshotMode.window.rawValue) {
             self.enabled = enabled
             self.providerType = providerType
             self.model = model
             self.customEndpoint = customEndpoint
             self.screenshotRegionSize = screenshotRegionSize
+            self.screenshotMode = screenshotMode
         }
 
         init(from decoder: Decoder) throws {
@@ -173,6 +177,8 @@ struct ConfigFile: Codable, Equatable {
             customEndpoint = try c.decodeIfPresent(String.self, forKey: .customEndpoint) ?? ""
             screenshotRegionSize = try c.decodeIfPresent(Double.self, forKey: .screenshotRegionSize)
                 ?? Double(Constants.Screenshot.defaultRegionSize)
+            screenshotMode = try c.decodeIfPresent(String.self, forKey: .screenshotMode)
+                ?? ScreenshotMode.window.rawValue
         }
     }
 
@@ -240,7 +246,8 @@ struct ConfigFile: Codable, Equatable {
             providerType: settings.aiProviderType.rawValue,
             model: settings.aiModel,
             customEndpoint: settings.aiCustomEndpoint,
-            screenshotRegionSize: Double(settings.screenshotRegionSize)
+            screenshotRegionSize: Double(settings.screenshotRegionSize),
+            screenshotMode: settings.screenshotMode.rawValue
         )
     }
 
@@ -270,6 +277,9 @@ struct ConfigFile: Codable, Equatable {
         settings.aiModel = ai.model
         settings.aiCustomEndpoint = ai.customEndpoint
         settings.screenshotRegionSize = CGFloat(ai.screenshotRegionSize)
+        if let mode = ScreenshotMode(rawValue: ai.screenshotMode) {
+            settings.screenshotMode = mode
+        }
     }
 
     // MARK: - TOML Output
@@ -325,6 +335,8 @@ struct ConfigFile: Codable, Equatable {
         custom_endpoint = "\(ai.customEndpoint)"
         # Size in px of the screenshot region captured around the cursor for AI analysis
         screenshot_region_size = \(Self.fmtFloat(ai.screenshotRegionSize))
+        # Options: region, window, screen
+        screenshot_mode = "\(ai.screenshotMode)"
         """
     }
 

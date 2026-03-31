@@ -19,33 +19,43 @@ final class LLMService {
     private let debugLog = DebugLogStore.shared
 
     static let systemPrompt = """
-        You are a helpful assistant embedded in a macOS app called Scry. The user \
-        force-clicked on something on their screen and you are seeing a screenshot of \
-        the region around their cursor. If the screenshot contains text, explain its \
-        meaning or provide useful context. If it shows a UI element, icon, or image, \
-        describe what you see. Be concise and helpful. Respond in 2-4 sentences.
+        You are Scry, a macOS assistant that helps users understand what's on their screen. \
+        The user triggered Scry while looking at their screen. You will receive a screenshot \
+        of what they see. A small colored circle marks the user's cursor position — focus \
+        your analysis on the content near that marker.
+
+        Guidelines:
+        - If the user selected specific text, explain, define, or provide context for that text.
+        - If no text was selected, focus on whatever is near the cursor marker and describe or explain it.
+        - If the screenshot shows code, explain what it does.
+        - If it shows a UI element, icon, or image, describe it and explain its purpose.
+        - Be concise: 2-4 sentences unless the topic warrants more detail.
+        - When extracted text is provided alongside the screenshot, use both — the text may \
+        include content scrolled off-screen that the screenshot doesn't show.
         """
 
-    /// Starts a streaming LLM analysis, optionally including a screenshot.
-    func analyzeImage(_ image: CGImage?, query: String? = nil) -> LLMStreamingResponse {
+    /// Starts a streaming LLM analysis from an extraction result.
+    func analyze(_ result: ExtractionResult) -> LLMStreamingResponse {
         let response = LLMStreamingResponse()
         let settings = AppSettings.shared
-
         let providerType = settings.aiProviderType
 
         if providerType != .ollama, settings.aiAPIKey.isEmpty {
-            response.error = "No API key configured. Open Preferences → AI to set one."
+            response.error = "No API key configured. Open Preferences \u{2192} AI to set one."
             response.isComplete = true
             return response
         }
 
-        // Encode image when available; skip for text-only Ollama models or nil image
+        // Encode screenshot (use annotated version with cursor ring)
         let imageData: String?
-        if let image = image {
-            imageData = jpegBase64(from: image)
+        if let screenshot = result.screenshot {
+            imageData = jpegBase64(from: screenshot)
         } else {
             imageData = nil
         }
+
+        // Build user prompt based on what we have
+        let userPrompt = buildUserPrompt(result: result)
 
         let model = settings.aiModel
         let apiKey = settings.aiAPIKey
@@ -55,8 +65,6 @@ final class LLMService {
             response.isComplete = true
             return response
         }
-
-        let userPrompt = query ?? "What is this?"
 
         response.task = Task {
             do {
@@ -109,6 +117,46 @@ final class LLMService {
         return response
     }
 
+    /// Legacy compatibility: analyze with raw image and query string.
+    func analyzeImage(_ image: CGImage?, query: String? = nil) -> LLMStreamingResponse {
+        let result = ExtractionResult(
+            screenshot: image,
+            rawScreenshot: image,
+            cursorPosition: .zero,
+            axText: query,
+            ocrText: nil,
+            ocrCenterLine: nil
+        )
+        return analyze(result)
+    }
+
+    // MARK: - Prompt Building
+
+    private func buildUserPrompt(result: ExtractionResult) -> String {
+        let hasImage = result.screenshot != nil
+        let hasText = !(result.axText ?? "").isEmpty
+
+        if hasText && hasImage {
+            // swiftlint:disable:next force_unwrapping
+            let text = result.axText!
+            return "The user selected this text: \"\(text)\"\n\n"
+                + "The screenshot shows the area they were looking at. "
+                + "Explain or provide context for the selected text."
+        }
+
+        if hasImage {
+            return "Focus on the content near the cursor marker. "
+                + "What is it? Describe and provide helpful context."
+        }
+
+        if hasText {
+            // swiftlint:disable:next force_unwrapping
+            return "The user selected: \"\(result.axText!)\"\n\nExplain or provide context."
+        }
+
+        return "What is on the screen? Describe what you see."
+    }
+
     // MARK: - Endpoint Resolution
 
     private func endpointURL(for provider: AIProviderType, settings: AppSettings) -> String {
@@ -136,87 +184,73 @@ final class LLMService {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        // Set auth headers
         switch config.providerType {
         case .claude:
             request.setValue(config.apiKey, forHTTPHeaderField: "x-api-key")
             request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
         case .ollama:
-            break // No auth header for local Ollama
+            break
         case .openai, .custom:
             request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
         }
 
-        // Build request body
         let body: Data
         switch config.providerType {
         case .claude:
-            let payload: [String: Any] = [
-                "model": config.model,
-                "max_tokens": Constants.AIConfig.maxTokens,
-                "stream": true,
-                "system": Self.systemPrompt,
-                "messages": [
-                    [
-                        "role": "user",
-                        "content": [
-                            [
-                                "type": "image",
-                                "source": [
-                                    "type": "base64",
-                                    "media_type": "image/jpeg",
-                                    "data": config.imageBase64 ?? "",
-                                ],
-                            ],
-                            [
-                                "type": "text",
-                                "text": config.userPrompt,
-                            ],
-                        ],
-                    ],
-                ],
-            ]
-            body = try JSONSerialization.data(withJSONObject: payload)
-
+            body = try buildClaudeBody(config)
         case .openai, .ollama, .custom:
-            var userContent: Any
-            if let imageBase64 = config.imageBase64 {
-                userContent = [
-                    [
-                        "type": "image_url",
-                        "image_url": [
-                            "url": "data:image/jpeg;base64,\(imageBase64)",
-                        ],
-                    ],
-                    [
-                        "type": "text",
-                        "text": config.userPrompt,
-                    ],
-                ] as [[String: Any]]
-            } else {
-                userContent = config.userPrompt
-            }
-
-            let payload: [String: Any] = [
-                "model": config.model,
-                "max_tokens": Constants.AIConfig.maxTokens,
-                "stream": true,
-                "messages": [
-                    [
-                        "role": "system",
-                        "content": Self.systemPrompt,
-                    ],
-                    [
-                        "role": "user",
-                        "content": userContent,
-                    ],
-                ],
-            ]
-            body = try JSONSerialization.data(withJSONObject: payload)
+            body = try buildOpenAIBody(config)
         }
 
         request.httpBody = body
         return request
+    }
+
+    private func buildClaudeBody(_ config: RequestConfig) throws -> Data {
+        var content: [[String: Any]] = []
+        if let imageBase64 = config.imageBase64 {
+            content.append([
+                "type": "image",
+                "source": [
+                    "type": "base64",
+                    "media_type": "image/jpeg",
+                    "data": imageBase64,
+                ],
+            ])
+        }
+        content.append(["type": "text", "text": config.userPrompt])
+
+        let payload: [String: Any] = [
+            "model": config.model,
+            "max_tokens": Constants.AIConfig.maxTokens,
+            "stream": true,
+            "system": Self.systemPrompt,
+            "messages": [["role": "user", "content": content]],
+        ]
+        return try JSONSerialization.data(withJSONObject: payload)
+    }
+
+    private func buildOpenAIBody(_ config: RequestConfig) throws -> Data {
+        var userContent: Any
+        if let imageBase64 = config.imageBase64 {
+            userContent = [
+                ["type": "image_url", "image_url": ["url": "data:image/jpeg;base64,\(imageBase64)"]],
+                ["type": "text", "text": config.userPrompt],
+            ] as [[String: Any]]
+        } else {
+            userContent = config.userPrompt
+        }
+
+        let payload: [String: Any] = [
+            "model": config.model,
+            "max_tokens": Constants.AIConfig.maxTokens,
+            "stream": true,
+            "messages": [
+                ["role": "system", "content": Self.systemPrompt],
+                ["role": "user", "content": userContent],
+            ],
+        ]
+        return try JSONSerialization.data(withJSONObject: payload)
     }
 
     // MARK: - SSE Parsing
@@ -224,7 +258,6 @@ final class LLMService {
     private func parseSSELine(_ line: String, providerType: AIProviderType) -> String? {
         guard line.hasPrefix("data: ") else { return nil }
         let jsonStr = String(line.dropFirst(6))
-
         if jsonStr == "[DONE]" { return nil }
 
         guard let data = jsonStr.data(using: .utf8),
@@ -234,27 +267,25 @@ final class LLMService {
 
         switch providerType {
         case .claude:
-            // Anthropic: {"type":"content_block_delta","delta":{"type":"text_delta","text":"..."}}
             if let delta = json["delta"] as? [String: Any],
                let text = delta["text"] as? String {
                 return text
             }
         case .openai, .ollama, .custom:
-            // OpenAI-compatible: {"choices":[{"delta":{"content":"..."}}]}
             if let choices = json["choices"] as? [[String: Any]],
                let delta = choices.first?["delta"] as? [String: Any],
                let content = delta["content"] as? String {
                 return content
             }
         }
-
         return nil
     }
 
     // MARK: - Image Encoding
 
     private func jpegBase64(from cgImage: CGImage) -> String? {
-        let nsImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+        let size = NSSize(width: cgImage.width, height: cgImage.height)
+        let nsImage = NSImage(cgImage: cgImage, size: size)
         guard let tiff = nsImage.tiffRepresentation,
               let bitmap = NSBitmapImageRep(data: tiff),
               let jpeg = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.8]) else {

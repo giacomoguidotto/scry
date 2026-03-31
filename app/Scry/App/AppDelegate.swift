@@ -95,27 +95,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     RippleOverlay.show(at: position)
 
     Task { @MainActor in
-      let query = await textExtractorService?.extractText(at: position, frontApp: frontApp)
+      let result = await textExtractorService?.extract(at: position, frontApp: frontApp)
 
-      let effectiveQuery: String
-      if let query = query, !query.isEmpty {
-        effectiveQuery = String(query.prefix(settings.maxQueryLength))
-        debugLog.log("Search", "Extracted text: \"\(effectiveQuery)\"", level: .info)
+      let queryText = String((result?.queryText ?? "").prefix(settings.maxQueryLength))
+      if !queryText.isEmpty {
+        debugLog.log("Search", "Extracted: \"\(queryText)\"", level: .info)
       } else {
-        debugLog.log("Search", "No text extracted — showing panel with hint", level: .warning)
-        effectiveQuery = ""
+        debugLog.log("Search", "No text extracted", level: .debug)
       }
 
-      // Pass screenshot to AI provider before showing panel
-      if let screenshot = textExtractorService?.lastScreenshot {
-        ProviderRegistry.shared.aiSearchProvider.screenshotImage = screenshot
-      }
+      // Pass full extraction result to AI provider
+      ProviderRegistry.shared.aiSearchProvider.extractionResult = result
 
       if searchPanelController == nil {
         searchPanelController = SearchPanelController()
       }
 
-      searchPanelController?.show(query: effectiveQuery, at: position)
+      searchPanelController?.show(query: queryText, at: position)
     }
   }
 

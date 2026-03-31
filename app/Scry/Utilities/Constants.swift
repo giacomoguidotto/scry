@@ -25,9 +25,10 @@ enum Constants {
     }
 
     enum Screenshot {
-        static let defaultRegionSize: CGFloat = 300
+        static let defaultRegionSize: CGFloat = 600
         static let minRegionSize: CGFloat = 150
-        static let maxRegionSize: CGFloat = 600
+        static let maxRegionSize: CGFloat = 1200
+        static let maxImageEdge: Int = 2000
     }
 
     enum AIConfig {
@@ -75,6 +76,7 @@ enum Constants {
         static let aiModel = "aiModel"
         static let aiCustomEndpoint = "aiCustomEndpoint"
         static let screenshotRegionSize = "screenshotRegionSize"
+        static let screenshotMode = "screenshotMode"
 
         // Legacy keys for migration only
         static let triggerMethod = "triggerMethod"
