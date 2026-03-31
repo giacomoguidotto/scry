@@ -1,4 +1,4 @@
-import { Github } from "lucide-react";
+import { GithubIcon } from "@/components/ui/icons";
 
 export function Footer() {
   return (
@@ -18,7 +18,7 @@ export function Footer() {
             rel="noopener noreferrer"
             target="_blank"
           >
-            <Github className="h-5 w-5" />
+            <GithubIcon className="h-5 w-5" />
           </a>
         </div>
       </div>

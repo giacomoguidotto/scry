@@ -1,6 +1,7 @@
 "use client";
 
-import { Github, Moon, Sun } from "lucide-react";
+import { Moon, Sun } from "lucide-react";
+import { GithubIcon } from "@/components/ui/icons";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import { ButtonLink } from "@/components/ui/button";
@@ -38,7 +39,7 @@ export function Navbar() {
             rel="noopener noreferrer"
             target="_blank"
           >
-            <Github className="h-5 w-5" />
+            <GithubIcon className="h-5 w-5" />
           </a>
 
           {mounted && (
