@@ -1,6 +1,6 @@
 "use client";
 
-import { Github } from "lucide-react";
+import { GithubIcon } from "@/components/ui/icons";
 import { motion } from "motion/react";
 import { ButtonLink } from "@/components/ui/button";
 import { scaleIn } from "@/lib/motion";
@@ -27,7 +27,7 @@ export function OpenSource() {
             target="_blank"
             variant="secondary"
           >
-            <Github className="h-5 w-5" />
+            <GithubIcon className="h-5 w-5" />
             Star on GitHub
           </ButtonLink>
         </div>
