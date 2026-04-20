@@ -25,16 +25,12 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
-      - name: Cache SPM packages
-        uses: actions/cache@v5
-        with:
-          path: app/Scry.xcodeproj/project.xcworkspace/xcshareddata/swiftpm
-          key: spm-${{ runner.os }}-${{ hashFiles('app/project.yml') }}
-          restore-keys: spm-${{ runner.os }}-
-
       - name: Generate Xcode project
         working-directory: app
         run: xcodegen generate
+
+      - name: Clean stale SPM artifact cache
+        run: rm -rf "$HOME/Library/Caches/org.swift.swiftpm/artifacts"
 
       - name: Resolve SPM packages
         working-directory: app
@@ -130,16 +126,12 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
-      - name: Cache SPM packages
-        uses: actions/cache@v5
-        with:
-          path: app/Scry.xcodeproj/project.xcworkspace/xcshareddata/swiftpm
-          key: spm-${{ runner.os }}-${{ hashFiles('app/project.yml') }}
-          restore-keys: spm-${{ runner.os }}-
-
       - name: Generate Xcode project
         working-directory: app
         run: xcodegen generate
+
+      - name: Clean stale SPM artifact cache
+        run: rm -rf "$HOME/Library/Caches/org.swift.swiftpm/artifacts"
 
       - name: Resolve SPM packages
         working-directory: app
