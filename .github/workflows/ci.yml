@@ -13,14 +13,14 @@ concurrency:
 jobs:
   build:
     name: Build & Test
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v6
 
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+        run: sudo xcode-select -s /Applications/Xcode_26.4.app/Contents/Developer
 
       - name: Install XcodeGen
         run: brew install xcodegen
@@ -62,7 +62,7 @@ jobs:
 
   lint:
     name: Swift Lint
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 10
 
     steps:
@@ -78,7 +78,7 @@ jobs:
 
   version:
     name: Tag Version
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 10
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     needs: [build]
@@ -104,7 +104,7 @@ jobs:
 
   release:
     name: Build & Release DMG
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 30
     if: needs.version.outputs.tag
     needs: [build, version]
@@ -121,7 +121,7 @@ jobs:
         run: git fetch --tags
 
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+        run: sudo xcode-select -s /Applications/Xcode_26.4.app/Contents/Developer
 
       - name: Install XcodeGen
         run: brew install xcodegen
