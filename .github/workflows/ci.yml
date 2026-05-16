@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+        run: sudo xcode-select -s /Applications/Xcode_26.4.app/Contents/Developer
 
       - name: Install XcodeGen
         run: brew install xcodegen
@@ -121,7 +121,7 @@ jobs:
         run: git fetch --tags
 
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+        run: sudo xcode-select -s /Applications/Xcode_26.4.app/Contents/Developer
 
       - name: Install XcodeGen
         run: brew install xcodegen
