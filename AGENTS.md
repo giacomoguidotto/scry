@@ -15,3 +15,17 @@ The Xcode project is generated from `app/project.yml`. Re-run `xcodegen` from `a
 ## Further reading
 
 - [Versioning & commits](docs/versioning.md)
+
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked in GitHub Issues on this repo. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the default five-label triage vocabulary. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout: read `CONTEXT.md` and relevant ADRs before architecture work. See `docs/agents/domain.md`.
