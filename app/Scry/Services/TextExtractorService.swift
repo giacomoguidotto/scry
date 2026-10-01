@@ -4,45 +4,101 @@ import NaturalLanguage
 
 final class TextExtractorService {
     private let debugLog = DebugLogStore.shared
-    private let screenshotService = ScreenshotService()
-    private let ocrService = OCRService()
+    private let captureScreenshot: (ScreenshotMode, NSPoint, NSRunningApplication?) -> (annotated: CGImage, raw: CGImage)?
+    private let recognizeText: (CGImage) async -> OCRResult?
 
-    /// Selection snapshot taken at mouse-down, before force-click auto-selects text.
-    private var preGestureSelection: String?
+    private struct SelectionSnapshot {
+        let processIdentifier: pid_t
+        let gestureID: UUID
+        let text: String
+    }
+
+    private let selectionLock = NSLock()
+    private var preGestureSelection: SelectionSnapshot?
+    private let selectedTextReader: (pid_t, Float?) -> String?
+
+    init(
+        captureScreenshot: @escaping (ScreenshotMode, NSPoint, NSRunningApplication?) -> (annotated: CGImage, raw: CGImage)?
+            = ScreenshotService().capture,
+        recognizeText: @escaping (CGImage) async -> OCRResult? = OCRService().recognizeText,
+        selectedTextReader: @escaping (pid_t, Float?) -> String? = TextExtractorService.readSelectedText
+    ) {
+        self.captureScreenshot = captureScreenshot
+        self.recognizeText = recognizeText
+        self.selectedTextReader = selectedTextReader
+    }
 
     /// Snapshots the current selection at mouse-down time (before force-click
     /// auto-selects text). Called on every mouse-down while the event tap is active.
-    func snapshotSelection() {
-        if let text = extractViaAccessibility(), !text.isEmpty {
-            preGestureSelection = text
-            debugLog.log("TextExtractor", "Snapshot: got selection via AX", level: .debug)
-            return
+    func snapshotSelection(gestureID: UUID) {
+        snapshotSelection(processIdentifier: externalProcessIdentifier(NSWorkspace.shared.frontmostApplication), gestureID: gestureID)
+    }
+
+    func snapshotSelection(processIdentifier: pid_t?, gestureID: UUID) {
+        // Two AX calls are bounded to 30ms each so an unresponsive application
+        // cannot stall the synchronous event tap callback for the default AX timeout.
+        let text = processIdentifier.flatMap { selectedTextReader($0, 0.03) }
+        selectionLock.lock()
+        defer { selectionLock.unlock() }
+        preGestureSelection = nil
+        if let processIdentifier = processIdentifier, let text = text, !text.isEmpty {
+            preGestureSelection = SelectionSnapshot(processIdentifier: processIdentifier, gestureID: gestureID, text: text)
         }
     }
 
-    /// LLM-first extraction pipeline: screenshot first, text second.
-    func extract(at point: NSPoint, frontApp: NSRunningApplication? = nil) async -> ExtractionResult {
+    /// Keyboard shortcuts always read the current selection. A force-click can
+    /// consume only its own application's snapshot, exactly once.
+    func selectedText(processIdentifier: pid_t?, gestureID: UUID? = nil) -> String? {
+        selectionLock.lock()
+        let snapshot = preGestureSelection
+        preGestureSelection = nil
+        selectionLock.unlock()
+        guard let processIdentifier = processIdentifier else { return nil }
+        if let gestureID = gestureID, snapshot?.gestureID == gestureID,
+           snapshot?.processIdentifier == processIdentifier {
+            return snapshot?.text
+        }
+        return selectedTextReader(processIdentifier, nil)
+    }
+
+    /// LLM-first extraction pipeline, retaining both screenshot and selected text.
+    func extract(at point: NSPoint, frontApp: NSRunningApplication? = nil, gestureID: UUID? = nil) async -> ExtractionResult {
+        await extract(
+            at: point,
+            processIdentifier: externalProcessIdentifier(frontApp ?? NSWorkspace.shared.frontmostApplication),
+            frontApp: frontApp,
+            gestureID: gestureID
+        )
+    }
+
+    func extract(
+        at point: NSPoint,
+        processIdentifier: pid_t?,
+        frontApp: NSRunningApplication? = nil,
+        gestureID: UUID? = nil
+    ) async -> ExtractionResult {
         let cursorPoint = point
 
-        // 1. Capture screenshot (always, unconditionally)
-        let mode = AppSettings.shared.screenshotMode
-        let captured = screenshotService.capture(mode: mode, around: cursorPoint, frontApp: frontApp)
+        // Read AX before screenshot work; keyboard selection must be current.
+        let axText = selectedText(
+            processIdentifier: processIdentifier,
+            gestureID: gestureID
+        )
 
-        // 2. AX text extraction (best-effort)
-        var axText = preGestureSelection
-        preGestureSelection = nil
-        if axText == nil {
-            axText = extractViaAccessibility(frontApp: frontApp)
-        }
+        // Capture screenshot (always, unconditionally)
+        let mode = AppSettings.shared.screenshotMode
+        let captured = captureScreenshot(mode, cursorPoint, frontApp)
+
         if let text = axText, !text.isEmpty {
             debugLog.log("TextExtractor", "AX: got \"\(text.prefix(80))\"", level: .debug)
         }
 
-        // 3. OCR on the raw screenshot (no cursor ring — would confuse Vision)
+        // A selected phrase already supplies the query; retain the screenshots for
+        // vision-capable providers without starting redundant on-device OCR.
         var ocrText: String?
         var ocrCenterLine: String?
-        if let raw = captured?.raw {
-            if let result = await ocrService.recognizeText(in: raw) {
+        if axText?.isEmpty != false, let raw = captured?.raw {
+            if let result = await recognizeText(raw) {
                 ocrText = result.fullText
                 ocrCenterLine = result.lineNearestCenter
                 if let line = ocrCenterLine {
@@ -63,8 +119,7 @@ final class TextExtractorService {
 
     // MARK: - Accessibility
 
-    private func extractViaAccessibility(frontApp: NSRunningApplication? = nil) -> String? {
-        let app = frontApp ?? NSWorkspace.shared.frontmostApplication
+    private func externalProcessIdentifier(_ app: NSRunningApplication?) -> pid_t? {
         guard let app = app else {
             debugLog.log("TextExtractor", "AX: no frontmost app", level: .debug)
             return nil
@@ -78,24 +133,33 @@ final class TextExtractorService {
             return nil
         }
 
-        let appElement = AXUIElementCreateApplication(app.processIdentifier)
+        return app.processIdentifier
+    }
+
+    private static func readSelectedText(processIdentifier: pid_t, timeout: Float?) -> String? {
+        let appElement = AXUIElementCreateApplication(processIdentifier)
+        if let timeout = timeout {
+            guard AXUIElementSetMessagingTimeout(appElement, timeout) == .success else { return nil }
+        }
 
         var focusedValue: AnyObject?
         let focusResult = AXUIElementCopyAttributeValue(
             appElement, kAXFocusedUIElementAttribute as CFString, &focusedValue)
         guard focusResult == .success else {
-            debugLog.log("TextExtractor", "AX: no focused element (\(focusResult.rawValue))", level: .debug)
             return nil
         }
 
         // swiftlint:disable:next force_cast
         let focusedElement = focusedValue as! AXUIElement
+        // Apple specifies that this timeout applies only to the individual object.
+        if let timeout = timeout {
+            guard AXUIElementSetMessagingTimeout(focusedElement, timeout) == .success else { return nil }
+        }
 
         var selectedTextValue: AnyObject?
         let textResult = AXUIElementCopyAttributeValue(
             focusedElement, kAXSelectedTextAttribute as CFString, &selectedTextValue)
         guard textResult == .success, let text = selectedTextValue as? String, !text.isEmpty else {
-            debugLog.log("TextExtractor", "AX: no selected text (\(textResult.rawValue))", level: .debug)
             return nil
         }
 

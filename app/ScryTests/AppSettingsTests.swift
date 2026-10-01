@@ -5,23 +5,7 @@ final class AppSettingsTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        // Reset relevant UserDefaults keys and singleton properties before each test
-        let defaults = UserDefaults.standard
-        let keys = [
-            Constants.UserDefaultsKeys.forceClick,
-            Constants.UserDefaultsKeys.hotkey,
-            Constants.UserDefaultsKeys.pressureSensitivity,
-            Constants.UserDefaultsKeys.panelWidth,
-            Constants.UserDefaultsKeys.panelHeight,
-            Constants.UserDefaultsKeys.showAnimations,
-            Constants.UserDefaultsKeys.theme,
-            Constants.UserDefaultsKeys.defaultProvider,
-            Constants.UserDefaultsKeys.enabledProviders,
-            Constants.UserDefaultsKeys.providerOrder,
-        ]
-        for key in keys { defaults.removeObject(forKey: key) }
-
-        // Reset singleton properties to code defaults (CI may have overridden them)
+        // Reset the isolated test settings without touching the real app's defaults.
         let settings = AppSettings.shared
         settings.forceClick = true
         settings.hotkey = .modifierTap(.globe)
