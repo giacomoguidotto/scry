@@ -4,12 +4,6 @@ struct ShortcutsPreferencesView: View {
     @ObservedObject var settings = AppSettings.shared
     @ObservedObject var permissions = PermissionsService.shared
 
-    /// Computed hold duration matching EventTapService.requiredHoldDuration().
-    private var holdDuration: Double {
-        let sensitivity = settings.pressureSensitivity
-        return 0.2 + (1.0 - sensitivity) * 0.5
-    }
-
     var body: some View {
         Form {
             Section {
@@ -35,20 +29,9 @@ struct ShortcutsPreferencesView: View {
                 Toggle("Enable Force Click", isOn: $settings.forceClick)
 
                 if settings.forceClick {
-                    HStack {
-                        Text("Sensitivity")
-                        Slider(value: $settings.pressureSensitivity, in: 0.1...1.0, step: 0.05)
-                        Text("\(Int(settings.pressureSensitivity * 100))%")
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                            .frame(width: 40, alignment: .trailing)
-                    }
-                    HStack(spacing: 16) {
-                        Label(String(format: "%.2fs hold", holdDuration), systemImage: "timer")
-                        Label("4pt drift max", systemImage: "arrow.up.left.and.arrow.down.right")
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    Text("Press firmly through the trackpad’s second click on selected text.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             } header: {
                 Label("Force Click", systemImage: "hand.tap")
@@ -56,7 +39,7 @@ struct ShortcutsPreferencesView: View {
 
             Section("Keyboard Shortcuts") {
                 shortcutRow(hotkeyDisplayLabel, "Scry hotkey")
-                shortcutRow("Force Click", "Hold-click on selected text")
+                shortcutRow("Force Click", "Force-click on selected text")
                 shortcutRow("\u{238B}", "Close panel")
                 shortcutRow("\u{2318} 1\u{2013}9", "Switch provider tabs")
                 shortcutRow("\u{2318} \u{21A9}", "Open in browser")

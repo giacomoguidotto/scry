@@ -6,7 +6,13 @@ import ServiceManagement
 final class AppSettings: ObservableObject {
   static let shared = AppSettings()
 
-  private let defaults = UserDefaults.standard
+  // The hosted test suite changes settings; never let it overwrite real providers or keys.
+  private let defaults: UserDefaults = {
+    if ProcessInfo.processInfo.environment["SCRY_TESTING"] == "1" {
+      return UserDefaults(suiteName: "com.giacomo.Scry.tests.\(UUID().uuidString)")!
+    }
+    return .standard
+  }()
   private var cancellables = Set<AnyCancellable>()
 
   // MARK: - Trigger
@@ -304,6 +310,7 @@ final class AppSettings: ObservableObject {
   // MARK: - Launch at Login
 
   private func updateLaunchAtLogin() {
+    guard ProcessInfo.processInfo.environment["SCRY_TESTING"] != "1" else { return }
     let service = SMAppService.mainApp
     do {
       if launchAtLogin {

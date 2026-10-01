@@ -265,7 +265,7 @@ struct TriggersStepView: View {
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundColor(ScryTheme.Colors.textPrimaryColor)
 
-            Text("Hold-click on selected text")
+            Text("Force-click on selected text")
                 .font(.system(size: 12))
                 .foregroundColor(ScryTheme.Colors.textSecondaryColor)
 
@@ -530,7 +530,7 @@ struct ReadyStepView: View {
                     triggerRow(
                         icon: "hand.tap",
                         label: "Force Click",
-                        detail: "Hold-click on any selected text"
+                        detail: "Force-click on any selected text"
                     )
                 }
                 if settings.hotkey != .none {

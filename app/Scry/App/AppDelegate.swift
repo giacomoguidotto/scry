@@ -65,7 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     preferencesController?.show()
   }
 
-  func performSearch(at point: NSPoint?) {
+  func performSearch(at point: NSPoint?, gestureID: UUID? = nil) {
     // If onboarding step 4 is active, dismiss it and proceed with search
     if !settings.hasCompletedOnboarding && onboardingController.isOnStepFour {
       onboardingController.dismissForSearch()
@@ -95,7 +95,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     RippleOverlay.show(at: position)
 
     Task { @MainActor in
-      let result = await textExtractorService?.extract(at: position, frontApp: frontApp)
+      let result = await textExtractorService?.extract(at: position, frontApp: frontApp, gestureID: gestureID)
 
       let queryText = String((result?.queryText ?? "").prefix(settings.maxQueryLength))
       if !queryText.isEmpty {
@@ -118,18 +118,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   // MARK: - Private
 
   private func setupServices() {
+    // Selection reader must exist before the event tap can forward mouse-down.
+    textExtractorService = TextExtractorService()
+
     // Event tap for force touch
     eventTapService = EventTapService()
     eventTapService?.mouseDownPublisher
-      .receive(on: DispatchQueue.main)
-      .sink { [weak self] in
-        self?.textExtractorService?.snapshotSelection()
+      .sink { [weak self] gestureID in
+        self?.textExtractorService?.snapshotSelection(gestureID: gestureID)
       }
       .store(in: &cancellables)
     eventTapService?.forceClickPublisher
       .receive(on: DispatchQueue.main)
-      .sink { [weak self] point in
-        self?.performSearch(at: point)
+      .sink { [weak self] event in
+        self?.performSearch(at: event.point, gestureID: event.gestureID)
       }
       .store(in: &cancellables)
 
@@ -137,9 +139,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // Permissions may be inherited (e.g. running from Xcode) even when
     // PermissionsService reports false, so let the tap/monitor try regardless.
     eventTapService?.start()
-
-    // Text extractor
-    textExtractorService = TextExtractorService()
 
     // Hotkey service
     hotKeyService = HotKeyService()
