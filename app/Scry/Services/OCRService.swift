@@ -9,45 +9,43 @@ struct OCRResult {
 
 final class OCRService {
     private let debugLog = DebugLogStore.shared
+    private let performRequest: (VNRecognizeTextRequest, CGImage) throws -> [VNRecognizedTextObservation]?
+
+    init(performRequest: @escaping (VNRecognizeTextRequest, CGImage) throws -> [VNRecognizedTextObservation]? = { request, image in
+        try VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
+        return request.results
+    }) {
+        self.performRequest = performRequest
+    }
 
     /// Performs on-device OCR on the given image and returns recognized text.
     func recognizeText(in image: CGImage) async -> OCRResult? {
-        await withCheckedContinuation { continuation in
-            let request = VNRecognizeTextRequest { request, error in
-                if let error = error {
-                    DebugLogStore.shared.log("OCR", "Recognition error: \(error.localizedDescription)", level: .error)
-                    continuation.resume(returning: nil)
-                    return
-                }
+        // Vision performs synchronously. Read results only after it returns so a
+        // request error and a thrown handler error cannot finish the operation twice.
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.usesLanguageCorrection = true
 
-                guard let observations = request.results as? [VNRecognizedTextObservation],
-                      !observations.isEmpty else {
-                    DebugLogStore.shared.log("OCR", "No text recognized", level: .debug)
-                    continuation.resume(returning: nil)
-                    return
-                }
-
-                let fullText = observations
-                    .compactMap { $0.topCandidates(1).first?.string }
-                    .joined(separator: " ")
-
-                let centerLine = Self.findLineNearestCenter(observations: observations)
-
-                DebugLogStore.shared.log("OCR", "Recognized \(observations.count) lines, center line: \(centerLine ?? "none")", level: .debug)
-                continuation.resume(returning: OCRResult(fullText: fullText, lineNearestCenter: centerLine))
-            }
-
-            request.recognitionLevel = .accurate
-            request.usesLanguageCorrection = true
-
-            let handler = VNImageRequestHandler(cgImage: image, options: [:])
-            do {
-                try handler.perform([request])
-            } catch {
-                debugLog.log("OCR", "Handler error: \(error.localizedDescription)", level: .error)
-                continuation.resume(returning: nil)
-            }
+        let observations: [VNRecognizedTextObservation]?
+        do {
+            observations = try performRequest(request, image)
+        } catch {
+            debugLog.log("OCR", "Handler error: \(error.localizedDescription)", level: .error)
+            return nil
         }
+
+        guard let observations = observations, !observations.isEmpty else {
+            debugLog.log("OCR", "No text recognized", level: .debug)
+            return nil
+        }
+
+        let fullText = observations
+            .compactMap { $0.topCandidates(1).first?.string }
+            .joined(separator: " ")
+        let centerLine = Self.findLineNearestCenter(observations: observations)
+
+        debugLog.log("OCR", "Recognized \(observations.count) lines, center line: \(centerLine ?? "none")", level: .debug)
+        return OCRResult(fullText: fullText, lineNearestCenter: centerLine)
     }
 
     /// Finds the text line whose bounding box is nearest to the center of the image.
